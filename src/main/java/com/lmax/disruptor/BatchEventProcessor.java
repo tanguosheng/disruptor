@@ -113,10 +113,12 @@ public final class BatchEventProcessor<T>
     @Override
     public void run()
     {
+        // 两个线程不能同时执行一个 Processor, Processor 是有状态的
         if (running.compareAndSet(IDLE, RUNNING))
         {
             sequenceBarrier.clearAlert();
 
+            // EventHandler 可以实现 LifecycleAware 接口来获取事件通知
             notifyStart();
             try
             {
@@ -127,7 +129,9 @@ public final class BatchEventProcessor<T>
             }
             finally
             {
+                // 发出停机事件
                 notifyShutdown();
+                // 重置 Processor 的状态为空闲
                 running.set(IDLE);
             }
         }
@@ -150,29 +154,42 @@ public final class BatchEventProcessor<T>
     private void processEvents()
     {
         T event = null;
+        // 计算消费者下一个下标
         long nextSequence = sequence.get() + 1L;
 
+        // 消费写在一个死循环中，
+        // 用异常(AlertException)来终止消费，而没有用一个if状态位来终止消费
+        // 这样每次循环都能少一个if判断，优化执行效率
         while (true)
         {
             try
             {
+                // 取得当前能用的 sequence
                 final long availableSequence = sequenceBarrier.waitFor(nextSequence);
                 if (batchStartAware != null)
                 {
                     batchStartAware.onBatchStart(availableSequence - nextSequence + 1);
                 }
 
+                // 处理一批事件
                 while (nextSequence <= availableSequence)
                 {
                     event = dataProvider.get(nextSequence);
+
+                    // 将事件传给消费者
+                    // event 当前获取到的事件
+                    // nextSequence 当前事件的序号
+                    // endOfBatch 是否是批次中最后一个
                     eventHandler.onEvent(event, nextSequence, nextSequence == availableSequence);
                     nextSequence++;
                 }
 
+                // 把消费到的最后一个事件的下标存起来
                 sequence.set(availableSequence);
             }
             catch (final TimeoutException e)
             {
+                // 执行注册的超时处理器
                 notifyTimeout(sequence.get());
             }
             catch (final AlertException ex)
@@ -184,6 +201,7 @@ public final class BatchEventProcessor<T>
             }
             catch (final Throwable ex)
             {
+                // 发生异常时执行异常处理器，默认实现为 FatalExceptionHandler, 抛出 RuntimeException
                 exceptionHandler.handleEventException(ex, nextSequence, event);
                 sequence.set(nextSequence);
                 nextSequence++;

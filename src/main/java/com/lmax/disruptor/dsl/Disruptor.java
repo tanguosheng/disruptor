@@ -554,18 +554,23 @@ public class Disruptor<T>
         final Sequence[] processorSequences = new Sequence[eventHandlers.length];
         final SequenceBarrier barrier = ringBuffer.newBarrier(barrierSequences);
 
+        // 循环添加进来的消费者处理程序
         for (int i = 0, eventHandlersLength = eventHandlers.length; i < eventHandlersLength; i++)
         {
+            // 消费者处理程序
             final EventHandler<? super T> eventHandler = eventHandlers[i];
 
+            // 创建批量事件处理器
             final BatchEventProcessor<T> batchEventProcessor =
                 new BatchEventProcessor<>(ringBuffer, barrier, eventHandler);
 
+            // 如果添加了异常处理程序
             if (exceptionHandler != null)
             {
                 batchEventProcessor.setExceptionHandler(exceptionHandler);
             }
 
+            // 将封装好的 EventProcessor 存起来
             consumerRepository.add(batchEventProcessor, eventHandler, barrier);
             processorSequences[i] = batchEventProcessor.getSequence();
         }

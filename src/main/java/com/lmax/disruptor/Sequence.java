@@ -99,6 +99,8 @@ public class Sequence extends RhsPadding
      */
     public void set(final long value)
     {
+        // 由于StoreStore屏障的性能损耗小于StoreLoad屏障，避免了写写重排序，但是不保证内存可见性，
+        // 在保证顺序性这个前提下volatile效率高
         UNSAFE.putOrderedLong(this, VALUE_OFFSET, value);
     }
 

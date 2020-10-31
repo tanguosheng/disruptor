@@ -60,11 +60,14 @@ public final class SleepingWaitStrategy implements WaitStrategy
         long availableSequence;
         int counter = retries;
 
+        // 如果 buffer 的 sequence < 期待的 sequence, 执行等待策略
         while ((availableSequence = dependentSequence.get()) < sequence)
         {
+            // 执行等待策略
             counter = applyWaitMethod(barrier, counter);
         }
 
+        // 直到达到期待的 sequence
         return availableSequence;
     }
 
@@ -78,17 +81,23 @@ public final class SleepingWaitStrategy implements WaitStrategy
     {
         barrier.checkAlert();
 
+        // 默认重试200次
+
         if (counter > 100)
         {
+            // 前100次循环先不让出执行权，仅仅只是自旋
             --counter;
         }
         else if (counter > 0)
         {
             --counter;
+
+            // 0到100次时让出线程执行权
             Thread.yield();
         }
         else
         {
+            // counter为负数时睡眠，默认睡眠 100 纳秒
             LockSupport.parkNanos(sleepTimeNs);
         }
 
